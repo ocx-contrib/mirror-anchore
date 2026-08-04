@@ -90,11 +90,11 @@ assets:
     - "^syft_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
   darwin/arm64:
     - "^syft_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
-  # ── PASS 3 (windows) — .zip here, .tar.gz everywhere else ─────────────────
-  # windows/amd64:
-  #   - "^syft_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
-  # windows/arm64:
-  #   - "^syft_\\d+\\.\\d+\\.\\d+_windows_arm64\\.zip$"
+  # ── PASS 3 (windows) — LANDED. .zip here, .tar.gz everywhere else ─────────
+  windows/amd64:
+    - "^syft_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
+  windows/arm64:
+    - "^syft_\\d+\\.\\d+\\.\\d+_windows_arm64\\.zip$"
 
 asset_type:
   # FLAT archive on EVERY platform — no wrapper directory anywhere. Verified by
@@ -179,14 +179,14 @@ platforms:
   darwin/arm64:
     runner: macos-14
     shell: bash
-  # ── PASS 3 (windows) ──────────────────────────────────────────────────────
-  # windows/amd64:
-  #   runner: windows-latest
-  #   shell: pwsh
-  # windows/arm64:
-  #   # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
-  #   runner: windows-11-arm
-  #   shell: pwsh
+  # ── PASS 3 (windows) — LANDED ─────────────────────────────────────────────
+  windows/amd64:
+    runner: windows-latest
+    shell: pwsh
+  windows/arm64:
+    # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
+    runner: windows-11-arm
+    shell: pwsh
   #
   # No `containers:` on darwin or windows — those runners have no Linux
   # container engine, and the key is rejected at spec load.
