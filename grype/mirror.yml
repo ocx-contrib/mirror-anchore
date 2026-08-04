@@ -124,7 +124,7 @@ versions:
   new_per_run: 5
   # Without this the generated workflow only fires on workflow_dispatch + push
   # and never auto-discovers a new upstream release.
-  poll_interval: "36 */6 * * *"
+  poll_interval: "50 3-23/6 * * *"
 
 tests:
   # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and

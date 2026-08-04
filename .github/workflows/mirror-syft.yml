@@ -6,7 +6,7 @@ name: syft
 
 on:
   schedule:
-    - cron: '35 */6 * * *'
+    - cron: '14 3-23/6 * * *'
   workflow_dispatch:
   push:
     branches: [main]
