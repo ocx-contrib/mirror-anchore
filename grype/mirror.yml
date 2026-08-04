@@ -91,9 +91,9 @@ assets:
     - "^grype_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
   darwin/arm64:
     - "^grype_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
-  # ── PASS 3 (windows) — amd64 ONLY; see the windows/arm64 note above ───────
-  # windows/amd64:
-  #   - "^grype_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
+  # ── PASS 3 (windows) — LANDED. amd64 ONLY; see the windows/arm64 note above
+  windows/amd64:
+    - "^grype_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
 
 asset_type:
   # FLAT archive on EVERY platform — no wrapper directory anywhere. Verified by
@@ -174,10 +174,10 @@ platforms:
   darwin/arm64:
     runner: macos-14
     shell: bash
-  # ── PASS 3 (windows) ──────────────────────────────────────────────────────
-  # windows/amd64:
-  #   runner: windows-latest
-  #   shell: pwsh
+  # ── PASS 3 (windows) — LANDED ─────────────────────────────────────────────
+  windows/amd64:
+    runner: windows-latest
+    shell: pwsh
   #
   # windows/arm64: upstream ships no asset (verified v0.115.0 / v0.116.0 /
   # v0.116.1 — only grype_<V>_windows_amd64.zip exists). NEVER declare it: it
