@@ -86,11 +86,11 @@ assets:
     - "^grype_\\d+\\.\\d+\\.\\d+_linux_amd64\\.tar\\.gz$"
   linux/arm64:
     - "^grype_\\d+\\.\\d+\\.\\d+_linux_arm64\\.tar\\.gz$"
-  # ── PASS 2 (darwin) — uncomment together with the platforms: keys below ────
-  # darwin/amd64:
-  #   - "^grype_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
-  # darwin/arm64:
-  #   - "^grype_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
+  # ── PASS 2 (darwin) — LANDED ──────────────────────────────────────────────
+  darwin/amd64:
+    - "^grype_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
+  darwin/arm64:
+    - "^grype_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
   # ── PASS 3 (windows) — amd64 ONLY; see the windows/arm64 note above ───────
   # windows/amd64:
   #   - "^grype_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
@@ -165,15 +165,15 @@ platforms:
       - { image: "ubuntu:24.04", shell: bash }
       - { image: "alpine:3.20",  shell: sh }
       - { image: "fedora:40",    shell: bash }
-  # ── PASS 2 (darwin) ───────────────────────────────────────────────────────
-  # darwin/amd64:
-  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
-  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
-  #   runner: macos-14
-  #   prefix: ["arch", "-x86_64"]
-  # darwin/arm64:
-  #   runner: macos-14
-  #   shell: bash
+  # ── PASS 2 (darwin) — LANDED ──────────────────────────────────────────────
+  darwin/amd64:
+    # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+    # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+    runner: macos-14
+    prefix: ["arch", "-x86_64"]
+  darwin/arm64:
+    runner: macos-14
+    shell: bash
   # ── PASS 3 (windows) ──────────────────────────────────────────────────────
   # windows/amd64:
   #   runner: windows-latest
