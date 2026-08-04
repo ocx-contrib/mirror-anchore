@@ -1,0 +1,206 @@
+extends: ../mirror-base.yml
+
+name: syft
+
+# Logical index package `anchore/syft` at the physical path
+# `ghcr.io/ocx-contrib/anchore/syft` — slash segments, never hyphen-flattened.
+# The first segment must be this repo's own GitHub owner: GITHUB_TOKEN only
+# authorises packages owned by the repo the workflow runs in.
+#
+# The namespace is the upstream org, which is also the project's own brand
+# (Anchore, Inc.), and this repository carries a second Anchore tool — grype —
+# alongside it.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/anchore/syft
+
+source:
+  type: github_release
+  owner: anchore
+  repo: syft
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# syft is a pure-Go, cgo-free goreleaser build: upstream ships ONE Linux build
+# per arch and it is fully static. Measured on v1.50.0 (newest in range) AND
+# v1.48.0 (oldest in range), both arches — four artifacts:
+#
+#   $ file syft            # v1.50.0 linux_amd64
+#   ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked,
+#   Go BuildID=…, stripped
+#   $ readelf -l syft | grep -c INTERP  → 0
+#   $ readelf -d syft | grep -c NEEDED  → 0
+#
+#   $ file syft            # v1.50.0 linux_arm64
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, Go BuildID=…, stripped        INTERP 0, NEEDED 0
+#
+#   v1.48.0 linux_amd64 and linux_arm64: identical readings (INTERP 0, NEEDED 0)
+#
+# Not UPX-packed — `strings -a syft | grep -c '^UPX'` → 0 on all four, and
+# `readelf -h` reports 16 real section headers starting at byte 400, so the
+# "statically linked" reading is the ELF's own and not a packer stub hiding a
+# PT_INTERP.
+#
+# No PT_INTERP and no DT_NEEDED means the artifact requires NOTHING of the host
+# userland, so both Linux keys are BARE — no `+libc.*` suffix. `os.features`
+# states what an artifact REQUIRES, so tagging a static build `+libc.musl`
+# would be a false requirement that hid it from every glibc host. Upstream
+# publishes no musl/gnu split, so there is no second key to weigh. The
+# `alpine:3.20` container leg below is what turns the universal claim into
+# evidence rather than assertion.
+#
+# ─── Scope — resolution verified BOTH ways on EVERY in-range release
+#     (v1.48.0, v1.49.0, v1.50.0) ───────────────────────────────────────────
+#
+# Each pattern below was grepped against the FULL asset list of all three
+# releases: every one matched EXACTLY ONE asset on all three. A pattern
+# matching zero is SILENTLY SKIPPED, not an error, so this check is the only
+# thing standing between a typo and a green run with a missing platform.
+#
+# ⚠️ THE `$` ANCHOR IS LOAD-BEARING — every platform has THREE decoys:
+#   syft_<V>_<os>_<arch>.sbom   — a self-describing SBOM for the binary itself.
+#                                 Present for EVERY platform including windows;
+#                                 not installable. An unanchored pattern reads
+#                                 it as a second format for that platform and
+#                                 fails the version with an ambiguous >1 match.
+#   syft_<V>_linux_<arch>.deb   — Debian package twin, linux only
+#   syft_<V>_linux_<arch>.rpm   — RPM twin, linux only
+# Upstream also publishes, and this mirror deliberately does not carry:
+#   syft_<V>_checksums.txt          — checksum sidecar
+#   syft_<V>_checksums.txt.pem/.sig — cosign cert + signature for that file
+#                                     ONLY; not per-platform.
+#
+# Upstream additionally builds linux/ppc64le, linux/riscv64 and linux/s390x.
+# Those are dropped, not excluded, and it is not a judgement call: OCX's
+# architecture enum has only `amd64` and `arm64`, so they cannot be expressed
+# as platform keys at all.
+#
+# ⚠️ v1.47.0 DOES NOT EXIST upstream — the history goes v1.46.0 → v1.48.0. It
+# is not a draft and not a prerelease, it was simply never published. A gap in
+# the discovered version sequence here is upstream's, not an indexing bug.
+assets:
+  linux/amd64:
+    - "^syft_\\d+\\.\\d+\\.\\d+_linux_amd64\\.tar\\.gz$"
+  linux/arm64:
+    - "^syft_\\d+\\.\\d+\\.\\d+_linux_arm64\\.tar\\.gz$"
+  # ── PASS 2 (darwin) — uncomment together with the platforms: keys below ────
+  # darwin/amd64:
+  #   - "^syft_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^syft_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
+  # ── PASS 3 (windows) — .zip here, .tar.gz everywhere else ─────────────────
+  # windows/amd64:
+  #   - "^syft_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
+  # windows/arm64:
+  #   - "^syft_\\d+\\.\\d+\\.\\d+_windows_arm64\\.zip$"
+
+asset_type:
+  # FLAT archive on EVERY platform — no wrapper directory anywhere. Verified by
+  # `tar tzvf` on v1.50.0 linux/amd64, linux/arm64 and darwin/arm64, by
+  # `unzip -l` on v1.50.0 windows/amd64 and windows/arm64, and re-checked on
+  # v1.48.0 linux/amd64 (the oldest in range). Every member sits at the archive
+  # root:
+  #   CHANGELOG.md  LICENSE  README.md  syft        (syft.exe on Windows)
+  # so there is nothing to strip. `strip_components: 0` extracts them straight
+  # to the content root, which is why metadata.json's PATH is a bare
+  # ${installPath} and `bin_scan` stays `off` (see ../mirror-base.yml — the scan
+  # only looks BELOW an ${installPath}/<dir> entry and would exit 65 here).
+  # `type: archive` covers the tarballs and the Windows zips alike; the format
+  # is taken from the asset's own extension.
+  type: archive
+  strip_components: 0
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 1.48.0 is the recon-assigned floor. All three in-range releases (1.48.0,
+  # 1.49.0, 1.50.0) pass the both-ways platform check above, share the same flat
+  # archive layout, and produce byte-identical output for the hermetic scan
+  # tests/smoke.star runs (measured on all three: `3|flask@3.0.0;
+  # requests@2.31.0;urllib3@2.0.7;`).
+  min: "1.48.0"
+  new_per_run: 5
+  # Without this the generated workflow only fires on workflow_dispatch + push
+  # and never auto-discovers a new upstream release.
+  poll_interval: "35 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: syft/tests/smoke.star
+
+# ─── Platform matrix — declared HERE, not in the base ───────────────────────
+#
+# ../mirror-base.yml deliberately carries no `platforms:` block: the two
+# packages in this repository have DIFFERENT matrices (syft ships
+# windows/arm64, grype does not), so there is nothing genuinely repo-wide to
+# inherit and the shallow-merge trap is avoided by construction.
+#
+# Staged rollout, one commit and one CI run per pass. A platform declared here
+# but absent from `assets:` does NOT cost nothing: the generated test matrix is
+# static, so the leg boots its runner, installs the toolchain, finds the
+# platform missing from every version's resolved set, skips, and reports
+# SUCCESS — macOS at 10× and Windows at 2× the minute rate to verify nothing.
+# So each pass uncomments the `assets:` keys above AND the platform keys below
+# in the SAME edit, by hand (never by sed — a replacement rewrites `\\.` to
+# `\.` inside an asset regex), then re-runs `generate ci` naming EVERY spec in
+# this repository and re-validates.
+#
+# libc evidence for the bare Linux keys is above `assets:`; the alpine leg is
+# what makes the universal claim evidence rather than assertion.
+platforms:
+  linux/amd64:
+    runner: ubuntu-latest
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  linux/arm64:
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front.
+    runner: ubuntu-24.04-arm
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  # ── PASS 2 (darwin) ───────────────────────────────────────────────────────
+  # darwin/amd64:
+  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+  #   runner: macos-14
+  #   prefix: ["arch", "-x86_64"]
+  # darwin/arm64:
+  #   runner: macos-14
+  #   shell: bash
+  # ── PASS 3 (windows) ──────────────────────────────────────────────────────
+  # windows/amd64:
+  #   runner: windows-latest
+  #   shell: pwsh
+  # windows/arm64:
+  #   # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
+  #   runner: windows-11-arm
+  #   shell: pwsh
+  #
+  # No `containers:` on darwin or windows — those runners have no Linux
+  # container engine, and the key is rejected at spec load.
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/anchore/syft/license --jq '.license.spdx_id'
+  #   Apache-2.0
+  # The LICENSE file also travels INSIDE every release archive, so the terms
+  # ship with the redistributed bytes.
+  org.opencontainers.image.licenses: "Apache-2.0"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: anchore/syft
+  fork: ocx-contrib/index

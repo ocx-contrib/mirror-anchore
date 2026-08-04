@@ -1,0 +1,63 @@
+# Shared base for every spec in this repository (Anchore-published tools).
+#
+# NOT a spec: it has no name/target/source and is never loaded on its own.
+# Everything a package owns — name, target, source, assets, asset_type,
+# metadata, catalog, tests, versions, announce, annotations — stays in that
+# package's own mirror.yml.
+#
+# ⚠️ `extends:` is a SHALLOW merge of top-level keys. A spec that sets a key
+# below replaces that block OUTRIGHT — there is no per-key merge.
+#
+# ⚠️ `platforms:` IS DELIBERATELY ABSENT FROM THIS FILE.
+#
+# It is the key the shallow merge bites hardest (it carries BOTH the runner
+# matrix and the container legs, so a child restating it to tweak one runner
+# silently drops every `containers:` entry and nothing reds). Keeping it out
+# entirely — the mirror-kitware posture — is not just defensive here, it is
+# forced: THE TWO PACKAGES IN THIS REPOSITORY HAVE DIFFERENT MATRICES.
+#
+#   syft  ships windows/arm64.  grype does NOT (verified across every in-range
+#   release — see the exclusion note in grype/mirror.yml).
+#
+# A shared block would therefore be wrong for one of them, and the staged
+# linux → darwin → windows rollout needs per-package commenting anyway. Each
+# spec declares its own `platforms:` in full, with its own libc evidence.
+
+skip_prereleases: true
+cascade: true
+
+# Fleet rule for a NEW package. A cascade tag re-points on every re-publish;
+# without a build segment the new manifest reuses the bare version tag and
+# orphans the prior digest for registry GC, breaking any `@sha256:` pin in a
+# consumer's `ocx.lock`. The documented exception (a version that already
+# carries semver build metadata, where `date` would empty the mirror) does not
+# apply: both packages tag plain `vX.Y.Z` and version as plain `X.Y.Z`.
+build_timestamp: date
+
+verify:
+  github_asset_digest: true
+
+concurrency:
+  # Anchore's Go binaries are large — ~85-90 MB uncompressed, ~25-30 MB per
+  # compressed asset — so downloads are kept modest and compression is left to
+  # the runner's own core count.
+  max_downloads: 6
+  max_bundles: 4
+  max_pushes: 2
+  rate_limit_ms: 100
+  max_retries: 3
+  compression_threads: 0
+
+# `off`, and it cannot be otherwise for either package here. Both tools ship a
+# FLAT archive — the executable and its LICENSE/README siblings sit at the
+# archive root with no wrapper directory — so `strip_components: 0` puts them
+# straight at the content root and the bundle's only PATH entry is a bare
+# ${installPath}. `bin_scan` only looks BELOW an ${installPath}/<dir> entry, so
+# `auto`/`verify` is rejected at spec load with exit 65. `off` plus a
+# hand-listed `binaries` in each metadata.json is the blessed shape here.
+bin_scan: off
+
+notify:
+  discord:
+    webhook_secret: OCX_MIRROR_DISCORD_HOOK
+    user_id: "227748867204972545"  # pinged in-message on failures
