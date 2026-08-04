@@ -1,0 +1,201 @@
+extends: ../mirror-base.yml
+
+name: grype
+
+# Logical index package `anchore/grype` at the physical path
+# `ghcr.io/ocx-contrib/anchore/grype` — slash segments, never hyphen-flattened.
+# The first segment must be this repo's own GitHub owner: GITHUB_TOKEN only
+# authorises packages owned by the repo the workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/anchore/grype
+
+source:
+  type: github_release
+  owner: anchore
+  repo: grype
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# MEASURED FOR THIS PACKAGE, not inherited from the syft sibling. The two tools
+# come off the same org and the same goreleaser pipeline, and they still had to
+# be measured independently — the platform matrices differ (see below), so
+# assuming the linkage matched would have been a guess that happened to be
+# right.
+#
+# Pure-Go, cgo-free build: upstream ships ONE Linux build per arch and it is
+# fully static. Measured on v0.116.1 (newest in range) AND v0.115.0 (oldest in
+# range), both arches — four artifacts:
+#
+#   $ file grype           # v0.116.1 linux_amd64
+#   ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked,
+#   Go BuildID=…, stripped
+#   $ readelf -l grype | grep -c INTERP  → 0
+#   $ readelf -d grype | grep -c NEEDED  → 0
+#
+#   $ file grype           # v0.116.1 linux_arm64
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, …                             INTERP 0, NEEDED 0
+#
+#   v0.115.0 linux_amd64 and linux_arm64: identical readings (INTERP 0, NEEDED 0)
+#
+# Not UPX-packed — `strings -a grype | grep -c '^UPX'` → 0 on all four, and
+# `readelf -h` reports 16 real section headers starting at byte 400, so the
+# "statically linked" reading is the ELF's own and not a packer stub hiding a
+# PT_INTERP.
+#
+# No PT_INTERP and no DT_NEEDED means the artifact requires NOTHING of the host
+# userland, so both Linux keys are BARE. Cross-checked by running the binary in
+# `alpine:3.20` with `--network none`: `grype explain` completed normally under
+# musl (exit 0), which a glibc-dynamic build could not have done. The
+# `alpine:3.20` container leg below is the CI-side version of that proof.
+#
+# ─── Scope — resolution verified BOTH ways on EVERY in-range release
+#     (v0.115.0, v0.116.0, v0.116.1) ─────────────────────────────────────────
+#
+# Each pattern below was grepped against the FULL asset list of all three
+# releases: every one matched EXACTLY ONE asset on all three. A pattern
+# matching zero is SILENTLY SKIPPED, not an error.
+#
+# Upstream publishes, and this mirror deliberately does not carry:
+#   grype_<V>_linux_<arch>.deb / .rpm  — distro package twins of the same binary
+#   grype_<V>_checksums.txt            — checksum sidecar
+#   grype_<V>_checksums.txt.pem/.sig   — cosign cert + signature for that file
+#                                        ONLY; not per-platform.
+# The `$` anchor on every pattern is what keeps them out. (Unlike syft, grype
+# ships NO per-platform `.sbom` sidecar — do not assume the two Anchore tools
+# share asset conventions just because they share a release pipeline.)
+#
+# ⚠️ windows/arm64: DELIBERATELY NOT DECLARED — UPSTREAM SHIPS NO SUCH ASSET.
+# Verified against the full asset list of all three in-range releases
+# (v0.115.0, v0.116.0, v0.116.1): the only Windows artifact in each is
+# `grype_<V>_windows_amd64.zip`. Declaring `windows/arm64` would match zero
+# assets on every version — which the resolver treats as "platform absent,
+# skipped, not an error" — so the leg would boot a `windows-11-arm` runner,
+# test nothing, and report SUCCESS. The sibling `syft` package in this
+# repository DOES ship windows/arm64 and does declare it; that difference is
+# exactly why `platforms:` is not shared through ../mirror-base.yml.
+#
+# grype also ships no `linux/riscv64`, which syft does. And upstream's
+# `linux/ppc64le` / `linux/s390x` builds are dropped rather than excluded:
+# OCX's architecture enum has only `amd64` and `arm64`, so they cannot be
+# expressed as platform keys at all.
+assets:
+  linux/amd64:
+    - "^grype_\\d+\\.\\d+\\.\\d+_linux_amd64\\.tar\\.gz$"
+  linux/arm64:
+    - "^grype_\\d+\\.\\d+\\.\\d+_linux_arm64\\.tar\\.gz$"
+  # ── PASS 2 (darwin) — uncomment together with the platforms: keys below ────
+  # darwin/amd64:
+  #   - "^grype_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^grype_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
+  # ── PASS 3 (windows) — amd64 ONLY; see the windows/arm64 note above ───────
+  # windows/amd64:
+  #   - "^grype_\\d+\\.\\d+\\.\\d+_windows_amd64\\.zip$"
+
+asset_type:
+  # FLAT archive on EVERY platform — no wrapper directory anywhere. Verified by
+  # `tar tzvf` on v0.116.1 linux/amd64 and darwin/arm64, by `unzip -l` on
+  # v0.116.1 windows/amd64, and re-checked on v0.115.0 linux/amd64 (the oldest
+  # in range). Every member sits at the archive root:
+  #   CHANGELOG.md  LICENSE  README.md  grype       (grype.exe on Windows)
+  # so there is nothing to strip. `strip_components: 0` extracts them straight
+  # to the content root, which is why metadata.json's PATH is a bare
+  # ${installPath} and `bin_scan` stays `off` (see ../mirror-base.yml).
+  # `type: archive` covers the tarballs and the Windows zip alike; the format is
+  # taken from the asset's own extension.
+  type: archive
+  strip_components: 0
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 0.115.0 is the recon-assigned floor. All three in-range releases (0.115.0,
+  # 0.116.0, 0.116.1) pass the both-ways platform check above, share the same
+  # flat archive layout, and produce identical output for the hermetic
+  # `explain` path tests/smoke.star exercises (measured on all three).
+  min: "0.115.0"
+  new_per_run: 5
+  # Without this the generated workflow only fires on workflow_dispatch + push
+  # and never auto-discovers a new upstream release.
+  poll_interval: "36 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: grype/tests/smoke.star
+
+# ─── Platform matrix — declared HERE, not in the base ───────────────────────
+#
+# ../mirror-base.yml deliberately carries no `platforms:` block, because this
+# package and its syft sibling do NOT share a matrix: grype has no
+# windows/arm64 asset (evidence above `assets:`), so a shared block would be
+# wrong for one of the two. Each spec therefore declares its own in full.
+#
+# FIVE platforms total when fully rolled out — darwin/amd64, darwin/arm64,
+# linux/amd64, linux/arm64, windows/amd64. Not six: windows/arm64 is an
+# evidenced exclusion, not an oversight.
+#
+# Staged rollout, one commit and one CI run per pass. A platform declared here
+# but absent from `assets:` does NOT cost nothing: the generated test matrix is
+# static, so the leg boots its runner, finds the platform missing from every
+# version's resolved set, skips, and reports SUCCESS having tested nothing. So
+# each pass uncomments the `assets:` keys above AND the platform keys below in
+# the SAME edit, by hand (never by sed), then re-runs `generate ci` naming
+# EVERY spec in this repository and re-validates.
+platforms:
+  linux/amd64:
+    runner: ubuntu-latest
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  linux/arm64:
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front.
+    runner: ubuntu-24.04-arm
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  # ── PASS 2 (darwin) ───────────────────────────────────────────────────────
+  # darwin/amd64:
+  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+  #   runner: macos-14
+  #   prefix: ["arch", "-x86_64"]
+  # darwin/arm64:
+  #   runner: macos-14
+  #   shell: bash
+  # ── PASS 3 (windows) ──────────────────────────────────────────────────────
+  # windows/amd64:
+  #   runner: windows-latest
+  #   shell: pwsh
+  #
+  # windows/arm64: upstream ships no asset (verified v0.115.0 / v0.116.0 /
+  # v0.116.1 — only grype_<V>_windows_amd64.zip exists). NEVER declare it: it
+  # would 0-match every version and green a runner that tested nothing.
+  #
+  # No `containers:` on darwin or windows — those runners have no Linux
+  # container engine, and the key is rejected at spec load.
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/anchore/grype/license --jq '.license.spdx_id'
+  #   Apache-2.0
+  # The LICENSE file also travels INSIDE every release archive, so the terms
+  # ship with the redistributed bytes.
+  org.opencontainers.image.licenses: "Apache-2.0"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: anchore/grype
+  fork: ocx-contrib/index

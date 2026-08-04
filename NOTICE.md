@@ -9,6 +9,7 @@ carry their own license, recorded below.
 | Package | GHCR path | Upstream SPDX |
 |---|---|---|
 | `syft` | `ghcr.io/ocx-contrib/anchore/syft` | `Apache-2.0` |
+| `grype` | `ghcr.io/ocx-contrib/anchore/grype` | `Apache-2.0` |
 
 ---
 
@@ -36,6 +37,41 @@ modules under permissive licenses, enumerated in upstream's `go.mod`.
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/);
 [`syft/logo.png`](syft/logo.png) is a 512px raster of that same file, which
 CC BY 4.0 permits as an adaptation under the same attribution. The Syft and
+Anchore names remain marks of Anchore, Inc.; no endorsement is implied.
+
+No modifications are made to any upstream artifact in this repository; they are
+republished byte-for-byte inside an OCX bundle.
+
+---
+
+## `grype`
+
+Upstream: <https://github.com/anchore/grype>
+Published to `ghcr.io/ocx-contrib/anchore/grype`.
+
+| Component | SPDX | Holder |
+|---|---|---|
+| Grype (`grype`) | **Apache-2.0** | Copyright Anchore, Inc. |
+
+Permissive; redistribution of the compiled binary is granted under the terms of
+<https://github.com/anchore/grype/blob/main/LICENSE>. Verified via
+`gh api repos/anchore/grype/license` → `Apache-2.0`. As with syft, upstream
+ships the `LICENSE` file **inside** every release archive, so the terms travel
+with the redistributed bytes as well as being referenced here.
+
+The binary is a pure-Go, cgo-free static build that links third-party Go
+modules under permissive licenses, enumerated in upstream's `go.mod`.
+
+This package ships the **scanner only**. Grype's vulnerability database is a
+separate artifact that the tool downloads at runtime from Anchore's
+distribution endpoint under its own terms; none of it is redistributed here.
+
+[`grype/logo.svg`](grype/logo.svg) is the official
+[Grype logo](https://anchore.com/wp-content/uploads/2024/11/grype-logo.svg) by
+[Anchore](https://anchore.com/), used unmodified under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/);
+[`grype/logo.png`](grype/logo.png) is a 512px raster of that same file, which
+CC BY 4.0 permits as an adaptation under the same attribution. The Grype and
 Anchore names remain marks of Anchore, Inc.; no endorsement is implied.
 
 No modifications are made to any upstream artifact in this repository; they are

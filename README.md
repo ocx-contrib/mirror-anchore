@@ -6,6 +6,7 @@ One repository, one spec directory per package.
 | Package | Spec | Publishes to | Announced as | Upstream SPDX |
 |---|---|---|---|---|
 | [Syft](https://github.com/anchore/syft) | [`syft/mirror.yml`](syft/mirror.yml) | `ghcr.io/ocx-contrib/anchore/syft` | [`ocx.sh/anchore/syft`](https://index.ocx.sh/anchore/syft) | `Apache-2.0` |
+| [Grype](https://github.com/anchore/grype) | [`grype/mirror.yml`](grype/mirror.yml) | `ghcr.io/ocx-contrib/anchore/grype` | [`ocx.sh/anchore/grype`](https://index.ocx.sh/anchore/grype) | `Apache-2.0` |
 
 Each upstream release is discovered, re-bundled, smoke-tested per
 `(version, platform)` and only then pushed with cascade tags, after which the
@@ -16,6 +17,7 @@ result is announced into the OCX index.
 ```
 mirror-base.yml         repo-wide policy every spec inherits via `extends:`
 syft/                   one directory per package — same five files each
+grype/
 ├── mirror.yml          the spec — never at the repo root
 ├── metadata.json       bundle interface
 ├── CATALOG.md          → ocx package describe
@@ -51,9 +53,29 @@ requirement that hid it from every glibc host. The `alpine:3.20` container leg
 is what turns that claim into evidence; the measurement itself is recorded
 above the `assets:` block in `syft/mirror.yml`.
 
-Upstream also builds `linux/ppc64le`, `linux/riscv64` and `linux/s390x`. Those
-are not carried, and that is not a policy call: OCX's architecture enum has
-only `amd64` and `arm64`, so they cannot be expressed as platform keys at all.
+`grype` measures the same way — pure-Go, cgo-free, no `PT_INTERP` and no
+`DT_NEEDED` on either arch of the newest *and* the oldest in-range release, and
+verified running under `alpine:3.20` with `--network none` — so its Linux keys
+are bare too, with the same alpine leg attached.
+
+But it publishes **five** platform entries, not six:
+
+> **`windows/arm64` is a deliberate, evidenced exclusion. Upstream ships no
+> such asset.** Checked against the full asset list of every in-range release
+> (v0.115.0, v0.116.0, v0.116.1): the only Windows artifact is
+> `grype_<V>_windows_amd64.zip`. Declaring `windows/arm64` would match zero
+> assets, which the resolver treats as *"platform absent, skipped, not an
+> error"* — so the leg would boot a `windows-11-arm` runner, test nothing and
+> report success. syft **does** ship it and **does** declare it.
+
+That difference is the whole reason `platforms:` is per-spec here. grype also
+ships no `linux/riscv64`, which syft does. Two tools, one org, one release
+pipeline, two different matrices — measured, not assumed.
+
+Upstream also builds `linux/ppc64le` and `linux/s390x` (and `linux/riscv64` for
+syft). Those are not carried, and that is not a policy call: OCX's architecture
+enum has only `amd64` and `arm64`, so they cannot be expressed as platform keys
+at all.
 
 Platforms roll out in three staged passes — linux, then darwin, then windows —
 each its own commit and CI run. Staging only the `assets:` keys does **not**
@@ -65,8 +87,9 @@ edit as its assets.
 
 ## Asset selection
 
-Every syft release ships three decoys per platform beside the archive this
-mirror carries:
+Every syft release ships three decoys beside the archive this mirror carries
+(grype ships the same set **minus** the `.sbom` twin — the two tools do not
+share asset conventions just because they share a release pipeline):
 
 | Asset | Why it is not carried |
 |---|---|
@@ -93,7 +116,8 @@ in the discovered version sequence is upstream's, not an indexing bug.
 
 ```bash
 ocx-mirror package pipeline generate ci \
-  --spec syft/mirror.yml
+  --spec syft/mirror.yml \
+  --spec grype/mirror.yml
 ```
 
 **Name every spec.** `--spec` *appends* rather than replaces, so a command
@@ -124,10 +148,21 @@ Anchore's tools are network-facing by default (syft can pull images; grype
 downloads a vulnerability database), and container legs may have no egress. The
 smoke tests therefore exercise only paths that touch nothing but the scratch
 tree, with `*_CHECK_FOR_APP_UPDATE=false` to suppress the start-up version
-ping. `syft/tests/smoke.star` writes a three-package `requirements.txt`, scans
-it with the `template` encoder, and compares the rendered inventory byte for
-byte — a real SBOM from an input the test wrote itself, plus a negative control
-proving a red is reachable.
+ping. Both were verified under `alpine:3.20` with `--network none`.
+
+`syft/tests/smoke.star` writes a three-package `requirements.txt`, scans it with
+the `template` encoder, and compares the rendered inventory byte for byte — a
+real SBOM from an input the test wrote itself, plus a negative control proving a
+red is reachable.
+
+`grype/tests/smoke.star` deliberately runs **no scan**: every matching path
+needs the vulnerability database, and every route to that database is network.
+It exercises `grype explain` instead, feeding a synthetic findings document on
+stdin and asserting on grype's *composed* `<namespace>:<id>` key — a
+transformation, not an echo. Two negative controls back it: malformed stdin must
+exit non-zero (proving it parses rather than cats), and explaining an ID the
+document does not contain exits **0 with empty stdout** — so `expect.ok` alone
+would have been vacuous.
 
 ## Required secrets
 
