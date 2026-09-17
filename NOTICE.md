@@ -10,6 +10,7 @@ carry their own license, recorded below.
 |---|---|---|
 | `syft` | `ghcr.io/ocx-contrib/anchore/syft` | `Apache-2.0` |
 | `grype` | `ghcr.io/ocx-contrib/anchore/grype` | `Apache-2.0` |
+| `grant` | `ghcr.io/ocx-contrib/anchore/grant` | `Apache-2.0` |
 
 ---
 
@@ -73,6 +74,41 @@ distribution endpoint under its own terms; none of it is redistributed here.
 [`grype/logo.png`](grype/logo.png) is a 512px raster of that same file, which
 CC BY 4.0 permits as an adaptation under the same attribution. The Grype and
 Anchore names remain marks of Anchore, Inc.; no endorsement is implied.
+
+No modifications are made to any upstream artifact in this repository; they are
+republished byte-for-byte inside an OCX bundle.
+
+---
+
+## `grant`
+
+Upstream: <https://github.com/anchore/grant>
+Published to `ghcr.io/ocx-contrib/anchore/grant`.
+
+| Component | SPDX | Holder |
+|---|---|---|
+| Grant (`grant`) | **Apache-2.0** | Copyright Anchore, Inc. |
+
+Permissive; redistribution of the compiled binary is granted under the terms of
+<https://github.com/anchore/grant/blob/main/LICENSE>. Verified via
+`gh api repos/anchore/grant/license` → `Apache-2.0`. As with syft and grype,
+upstream ships the `LICENSE` file **inside** every release archive, so the terms
+travel with the redistributed bytes as well as being referenced here.
+
+The binary is a pure-Go, cgo-free static build that links third-party Go
+modules under permissive licenses, enumerated in upstream's `go.mod`. It embeds
+the SPDX license list, which is published by the Linux Foundation under
+[CC0-1.0](https://spdx.org/licenses/) — no rights are reserved in it.
+
+[`grant/logo.png`](grant/logo.png) is a 512px raster of the official Grant logo
+(`.github/images/grant-logo.png` in <https://github.com/anchore/grant>, which
+Anchore publishes under that repository's Apache-2.0 license);
+[`grant/logo.svg`](grant/logo.svg) is a vector tracing of that same image,
+produced here for the OCX catalog. Anchore publishes no official SVG for Grant
+— unlike syft and grype, whose `logo.svg` files are Anchore's own artwork used
+unmodified. Both files are therefore derivative works of an Apache-2.0 asset,
+used with attribution. The Grant and Anchore names remain marks of
+Anchore, Inc.; no endorsement is implied.
 
 No modifications are made to any upstream artifact in this repository; they are
 republished byte-for-byte inside an OCX bundle.

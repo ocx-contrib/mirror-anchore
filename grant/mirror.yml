@@ -1,0 +1,185 @@
+extends: ../mirror-base.yml
+
+name: grant
+
+# Logical index package `anchore/grant` at the physical path
+# `ghcr.io/ocx-contrib/anchore/grant` — slash segments, never hyphen-flattened.
+# The first segment must be this repo's own GitHub owner: GITHUB_TOKEN only
+# authorises packages owned by the repo the workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/anchore/grant
+
+source:
+  type: github_release
+  owner: anchore
+  repo: grant
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# MEASURED FOR THIS PACKAGE, not inherited from the syft/grype siblings. Same
+# org, same goreleaser pipeline — and the platform matrices still differ (see
+# below), so the linkage was re-read rather than assumed.
+#
+# Pure-Go, cgo-free build: upstream ships ONE Linux build per arch and it is
+# fully static. Measured on v0.6.8 (newest in range) and v0.6.0 (oldest in
+# range):
+#
+#   $ file grant           # v0.6.8 linux_amd64
+#   ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked,
+#   Go BuildID=…, stripped
+#   $ readelf -l grant | grep -c INTERP  → 0
+#   $ readelf -d grant | grep -c NEEDED  → 0
+#
+#   $ file grant           # v0.6.8 linux_arm64
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, …                             INTERP 0, NEEDED 0
+#
+#   v0.6.0 linux_amd64: identical reading (INTERP 0, NEEDED 0)
+#
+# Not UPX-packed — `strings -a grant | grep -c '^UPX'` → 0 on all three, so the
+# "statically linked" reading is the ELF's own and not a packer stub hiding a
+# PT_INTERP.
+#
+# No PT_INTERP and no DT_NEEDED means the artifact requires NOTHING of the host
+# userland, so both Linux keys are BARE. Cross-checked by running the full
+# smoke path (`grant check` against a scratch-written SPDX document) inside a
+# network-less namespace: exit codes and JSON identical to the glibc host. The
+# `alpine:3.20` container leg below is the CI-side version of that proof.
+#
+# ─── Scope — resolution verified BOTH ways on EVERY in-range release
+#     (v0.6.0, v0.6.2, v0.6.3, v0.6.4, v0.6.6, v0.6.7, v0.6.8) ───────────────
+#
+# Each pattern below was grepped against the FULL asset list of all seven
+# releases: every one matched EXACTLY ONE asset on all seven. A pattern
+# matching zero is SILENTLY SKIPPED, not an error.
+#
+# Upstream publishes, and this mirror deliberately does not carry:
+#   grant_<V>_<os>_<arch>.sbom         — grant's SBOM of itself, metadata
+#   grant_<V>_linux_<arch>.deb / .rpm  — distro package twins of the same binary
+#   grant_<V>_checksums.txt            — checksum sidecar
+#   grant_<V>_checksums.txt.pem/.sig   — cosign cert + signature for that file
+# The `$` anchor on every pattern is what keeps them out.
+#
+# ⚠️ NO WINDOWS PLATFORM AT ALL — UPSTREAM SHIPS NO WINDOWS ASSET.
+# Verified against the full asset list of all seven in-range releases: the
+# published set is darwin_{amd64,arm64}, linux_{amd64,arm64,ppc64le,s390x} and
+# nothing else. Declaring `windows/amd64` would match zero assets on every
+# version — which the resolver treats as "platform absent, skipped, not an
+# error" — so the leg would boot a `windows-latest` runner, test nothing, and
+# report SUCCESS. Both siblings in this repository DO ship Windows builds
+# (syft both arches, grype amd64 only); grant ships none. That is exactly why
+# `platforms:` is not shared through ../mirror-base.yml.
+#
+# Upstream's `linux/ppc64le` and `linux/s390x` builds are dropped rather than
+# excluded: OCX's architecture enum has only `amd64` and `arm64`, so they
+# cannot be expressed as platform keys at all.
+assets:
+  linux/amd64:
+    - "^grant_\\d+\\.\\d+\\.\\d+_linux_amd64\\.tar\\.gz$"
+  linux/arm64:
+    - "^grant_\\d+\\.\\d+\\.\\d+_linux_arm64\\.tar\\.gz$"
+  # ── PASS 2 (darwin) — uncomment together with the platforms: keys below ────
+  # darwin/amd64:
+  #   - "^grant_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^grant_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
+
+asset_type:
+  # FLAT archive on every platform — no wrapper directory anywhere. Verified by
+  # `tar tzf` on v0.6.8 linux/amd64, linux/arm64 and darwin/arm64, and
+  # re-checked on v0.6.0 linux/amd64 (the oldest in range). Every member sits at
+  # the archive root:
+  #   CHANGELOG.md  LICENSE  README.md  grant
+  # so there is nothing to strip. `strip_components: 0` extracts them straight
+  # to the content root, which is why metadata.json's PATH is a bare
+  # ${installPath} and `bin_scan` stays `off` (see ../mirror-base.yml).
+  type: archive
+  strip_components: 0
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 0.6.0 is the floor. All seven in-range releases (0.6.0, 0.6.2, 0.6.3,
+  # 0.6.4, 0.6.6, 0.6.7, 0.6.8) pass the both-ways platform check above, share
+  # the same flat archive layout, and produce byte-identical decisions for
+  # every assertion in tests/smoke.star — measured by running each binary
+  # against the same scratch fixtures.
+  min: "0.6.0"
+  new_per_run: 5
+  # Hash-staggered slot from
+  #   python3 .claude/skills/create-mirror/scripts/poll_stagger.py anchore/grant
+  # → slot 313 (minute 13, hour-offset 5). Never a hand-picked minute:
+  # fleet-synchronized crons burst-push to GHCR together and trip its secondary
+  # rate limit. Without this key the workflow has no `schedule:` trigger at all
+  # and the mirror never auto-discovers a release.
+  poll_interval: "13 5-23/6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: grant/tests/smoke.star
+
+# ─── Platform matrix — declared HERE, not in the base ───────────────────────
+#
+# ../mirror-base.yml deliberately carries no `platforms:` block: no two
+# packages in this repository share a matrix (syft 6 entries, grype 5, grant
+# 4), so a shared block would be wrong for at least two of them.
+#
+# FOUR platforms total when fully rolled out — linux/amd64, linux/arm64,
+# darwin/amd64, darwin/arm64. No Windows entry at any point: upstream ships no
+# Windows asset (evidence above `assets:`).
+#
+# Staged rollout, one commit and one CI run per pass. A platform declared here
+# but absent from `assets:` does NOT cost nothing: the generated test matrix is
+# static, so the leg boots its runner, finds the platform missing from every
+# version's resolved set, skips, and reports SUCCESS having tested nothing. So
+# pass 2 uncomments the `assets:` keys above AND the platform keys below in the
+# SAME edit, by hand (never by sed), then re-runs `generate ci` naming EVERY
+# spec in this repository and re-validates.
+platforms:
+  linux/amd64:
+    runner: ubuntu-latest
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  linux/arm64:
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front.
+    runner: ubuntu-24.04-arm
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "alpine:3.20",  shell: sh }
+      - { image: "fedora:40",    shell: bash }
+  # ── PASS 2 (darwin) — uncomment together with the assets: keys above ───────
+  # darwin/amd64:
+  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+  #   runner: macos-14
+  # darwin/arm64:
+  #   runner: macos-14
+  #   shell: bash
+  #
+  # No `containers:` on darwin — those runners have no Linux container engine,
+  # and the key is rejected at spec load.
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/anchore/grant/license --jq '.license.spdx_id'
+  #   Apache-2.0
+  # The LICENSE file also travels INSIDE every release archive, so the terms
+  # ship with the redistributed bytes.
+  org.opencontainers.image.licenses: "Apache-2.0"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: anchore/grant
+  fork: ocx-contrib/index

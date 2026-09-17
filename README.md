@@ -7,6 +7,7 @@ One repository, one spec directory per package.
 |---|---|---|---|---|
 | [Syft](https://github.com/anchore/syft) | [`syft/mirror.yml`](syft/mirror.yml) | `ghcr.io/ocx-contrib/anchore/syft` | [`ocx.sh/anchore/syft`](https://index.ocx.sh/anchore/syft) | `Apache-2.0` |
 | [Grype](https://github.com/anchore/grype) | [`grype/mirror.yml`](grype/mirror.yml) | `ghcr.io/ocx-contrib/anchore/grype` | [`ocx.sh/anchore/grype`](https://index.ocx.sh/anchore/grype) | `Apache-2.0` |
+| [Grant](https://github.com/anchore/grant) | [`grant/mirror.yml`](grant/mirror.yml) | `ghcr.io/ocx-contrib/anchore/grant` | [`ocx.sh/anchore/grant`](https://index.ocx.sh/anchore/grant) | `Apache-2.0` |
 
 Each upstream release is discovered, re-bundled, smoke-tested per
 `(version, platform)` and only then pushed with cascade tags, after which the
@@ -18,6 +19,7 @@ result is announced into the OCX index.
 mirror-base.yml         repo-wide policy every spec inherits via `extends:`
 syft/                   one directory per package — same five files each
 grype/
+grant/
 ├── mirror.yml          the spec — never at the repo root
 ├── metadata.json       bundle interface
 ├── CATALOG.md          → ocx package describe
@@ -53,6 +55,11 @@ requirement that hid it from every glibc host. The `alpine:3.20` container leg
 is what turns that claim into evidence; the measurement itself is recorded
 above the `assets:` block in `syft/mirror.yml`.
 
+`grant` measures the same way too — pure-Go, cgo-free, no `PT_INTERP` and no
+`DT_NEEDED` on either arch of the newest *and* the oldest in-range release, not
+UPX-packed, and its whole smoke path re-run inside a network-less namespace with
+identical results. Bare Linux keys, same alpine leg.
+
 `grype` measures the same way — pure-Go, cgo-free, no `PT_INTERP` and no
 `DT_NEEDED` on either arch of the newest *and* the oldest in-range release, and
 verified running under `alpine:3.20` with `--network none` — so its Linux keys
@@ -68,9 +75,17 @@ But it publishes **five** platform entries, not six:
 > error"* — so the leg would boot a `windows-11-arm` runner, test nothing and
 > report success. syft **does** ship it and **does** declare it.
 
+`grant` narrows it further still — **four** platform entries, no Windows at
+all:
+
+> **grant ships no Windows asset whatsoever.** Checked against the full asset
+> list of every in-range release (v0.6.0 … v0.6.8): the published set is
+> `darwin_{amd64,arm64}` and `linux_{amd64,arm64,ppc64le,s390x}`. syft ships
+> both Windows arches, grype ships `windows/amd64`, grant ships neither.
+
 That difference is the whole reason `platforms:` is per-spec here. grype also
-ships no `linux/riscv64`, which syft does. Two tools, one org, one release
-pipeline, two different matrices — measured, not assumed.
+ships no `linux/riscv64`, which syft does. Three tools, one org, one release
+pipeline, three different matrices — measured, not assumed.
 
 Upstream also builds `linux/ppc64le` and `linux/s390x` (and `linux/riscv64` for
 syft). Those are not carried, and that is not a policy call: OCX's architecture
@@ -88,8 +103,9 @@ edit as its assets.
 ## Asset selection
 
 Every syft release ships three decoys beside the archive this mirror carries
-(grype ships the same set **minus** the `.sbom` twin — the two tools do not
-share asset conventions just because they share a release pipeline):
+(grant ships the same set; grype ships it **minus** the `.sbom` twin — the
+tools do not share asset conventions just because they share a release
+pipeline):
 
 | Asset | Why it is not carried |
 |---|---|
@@ -117,7 +133,8 @@ in the discovered version sequence is upstream's, not an indexing bug.
 ```bash
 ocx-mirror package pipeline generate ci \
   --spec syft/mirror.yml \
-  --spec grype/mirror.yml
+  --spec grype/mirror.yml \
+  --spec grant/mirror.yml
 ```
 
 **Name every spec.** `--spec` *appends* rather than replaces, so a command
@@ -134,7 +151,7 @@ Run `direnv allow` once to put the pinned toolchain on `PATH`, and invoke
 
 ## The binaries claim
 
-Both Anchore archives are **flat** — `CHANGELOG.md`, `LICENSE`, `README.md` and
+All three Anchore archives are **flat** — `CHANGELOG.md`, `LICENSE`, `README.md` and
 the executable all sit at the archive root with no wrapper directory — so
 `strip_components: 0` puts them at the content root and the bundle's only PATH
 entry is a bare `${installPath}`. `bin_scan` only looks *below* an
@@ -145,10 +162,11 @@ exit 65. `mirror-base.yml` therefore sets `bin_scan: off` and each
 ## The smoke tests are hermetic
 
 Anchore's tools are network-facing by default (syft can pull images; grype
-downloads a vulnerability database), and container legs may have no egress. The
-smoke tests therefore exercise only paths that touch nothing but the scratch
-tree, with `*_CHECK_FOR_APP_UPDATE=false` to suppress the start-up version
-ping. Both were verified under `alpine:3.20` with `--network none`.
+downloads a vulnerability database; grant can scan a remote image), and
+container legs may have no egress. The smoke tests therefore exercise only
+paths that touch nothing but the scratch tree, with
+`*_CHECK_FOR_APP_UPDATE=false` where the tool has such a ping. All three were
+verified with no network reachable.
 
 `syft/tests/smoke.star` writes a three-package `requirements.txt`, scans it with
 the `template` encoder, and compares the rendered inventory byte for byte — a
@@ -163,6 +181,15 @@ transformation, not an echo. Two negative controls back it: malformed stdin must
 exit non-zero (proving it parses rather than cats), and explaining an ID the
 document does not contain exits **0 with empty stdout** — so `expect.ok` alone
 would have been vacuous.
+
+`grant/tests/smoke.star` writes a two-package SPDX document and two policies
+into scratch, then runs the same document through both: allowing MIT alone
+denies the GPL package and exits **1**, allowing both exits **0** and denies
+nothing. The verdict is the exit code, so the pair is what proves the policy
+engine ran rather than the document being echoed. Its negative control feeds
+`check` something that is not an SBOM — `"status": "error"`, non-zero — which
+matters because `grant list` on the same garbage exits **0** with an empty
+catalog.
 
 ## Required secrets
 
