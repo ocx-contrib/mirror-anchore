@@ -80,11 +80,11 @@ assets:
     - "^grant_\\d+\\.\\d+\\.\\d+_linux_amd64\\.tar\\.gz$"
   linux/arm64:
     - "^grant_\\d+\\.\\d+\\.\\d+_linux_arm64\\.tar\\.gz$"
-  # ── PASS 2 (darwin) — uncomment together with the platforms: keys below ────
-  # darwin/amd64:
-  #   - "^grant_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
-  # darwin/arm64:
-  #   - "^grant_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
+  # ── PASS 2 (darwin) — LANDED ──────────────────────────────────────────────
+  darwin/amd64:
+    - "^grant_\\d+\\.\\d+\\.\\d+_darwin_amd64\\.tar\\.gz$"
+  darwin/arm64:
+    - "^grant_\\d+\\.\\d+\\.\\d+_darwin_arm64\\.tar\\.gz$"
 
 asset_type:
   # FLAT archive on every platform — no wrapper directory anywhere. Verified by
@@ -136,13 +136,14 @@ tests:
 # darwin/amd64, darwin/arm64. No Windows entry at any point: upstream ships no
 # Windows asset (evidence above `assets:`).
 #
-# Staged rollout, one commit and one CI run per pass. A platform declared here
-# but absent from `assets:` does NOT cost nothing: the generated test matrix is
-# static, so the leg boots its runner, finds the platform missing from every
-# version's resolved set, skips, and reports SUCCESS having tested nothing. So
-# pass 2 uncomments the `assets:` keys above AND the platform keys below in the
-# SAME edit, by hand (never by sed), then re-runs `generate ci` naming EVERY
-# spec in this repository and re-validates.
+# Rolled out in two passes, one commit and one CI run each — linux first (10x
+# cheaper minutes), darwin once linux was green end to end. A platform declared
+# here but absent from `assets:` does NOT cost nothing: the generated test
+# matrix is static, so the leg boots its runner, finds the platform missing
+# from every version's resolved set, skips, and reports SUCCESS having tested
+# nothing. Each pass therefore uncommented the `assets:` keys above AND the
+# platform keys below in the SAME edit, by hand (never by sed), then re-ran
+# `generate ci` naming EVERY spec in this repository and re-validated.
 platforms:
   linux/amd64:
     runner: ubuntu-latest
@@ -158,14 +159,14 @@ platforms:
       - { image: "ubuntu:24.04", shell: bash }
       - { image: "alpine:3.20",  shell: sh }
       - { image: "fedora:40",    shell: bash }
-  # ── PASS 2 (darwin) — uncomment together with the assets: keys above ───────
-  # darwin/amd64:
-  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
-  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
-  #   runner: macos-14
-  # darwin/arm64:
-  #   runner: macos-14
-  #   shell: bash
+  # ── PASS 2 (darwin) — LANDED ──────────────────────────────────────────────
+  darwin/amd64:
+    # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+    # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+    runner: macos-14
+  darwin/arm64:
+    runner: macos-14
+    shell: bash
   #
   # No `containers:` on darwin — those runners have no Linux container engine,
   # and the key is rejected at spec load.
